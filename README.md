@@ -1,9 +1,6 @@
 # PesoVision
 
 **Predicción de la dirección del tipo de cambio USD/MXN** mediante extracción de conocimiento, ETL, modelado supervisado y dashboard interactivo.
-
-> Proyecto académico · Equipo de 2 personas · Python + SQL + Streamlit
-
 ---
 
 ## 1. Problema de negocio (Fase 1)
@@ -27,13 +24,13 @@ Pequeñas y medianas empresas, importadores, exportadores y personas físicas en
 | **Subida (1)** | `Close_t+1 > Close_t` |
 | **Bajada (0)** | `Close_t+1 ≤ Close_t` |
 
-Alternativa avanzada (Fase 3 opcional): regresión del **retorno porcentual** `(Close_t+1 - Close_t) / Close_t`.
+(Fase 3 opcional): regresión del **retorno porcentual** `(Close_t+1 - Close_t) / Close_t`.
 
 ### Alcance y limitaciones
 
 - Horizonte: **1 día hábil** (no trading intradía).
 - No es asesoría financiera; es un proyecto educativo de ciencia de datos.
-- El mercado cambiario tiene componente aleatoria; el objetivo es demostrar **metodología sólida**, no “batir al mercado”.
+- El mercado cambiario tiene componente aleatoria; el objetivo es demostrar **metodología sólida**, no “ganarle al mercado”.
 
 ---
 
@@ -144,9 +141,6 @@ flowchart LR
 
 ### Pendiente
 
-**Fase 1**
-- [ ] Validar con el profesor que la clasificación binaria diaria cumple el encuadre del curso
-- [ ] Completar nombres, fechas e institución en documentos de Fase 1
 
 **Fase 2**
 - [ ] Notebook EDA (`notebooks/01_eda.ipynb`) con 3 gráficas y conclusiones de calidad
@@ -154,9 +148,8 @@ flowchart LR
 
 **Fase 3**
 - [ ] Informe de resultados con métricas finales (markdown o sección en documento funcional)
-- [ ] Completar [`docs/DOCUMENTO_FUNCIONALIDAD.md`](docs/DOCUMENTO_FUNCIONALIDAD.md) secciones 8–9 (tabla de métricas, conclusiones, variables relevantes)
 - [ ] Discusión formal de overfitting/underfitting
-- [ ] Script `evaluate.py` separado (opcional; hoy la evaluación está en `train.py`)
+- [ ] Script `evaluate.py` separado
 
 **Fase 4**
 - [ ] Predicción “Sube / Baja” con probabilidad para el día siguiente
@@ -198,18 +191,7 @@ Si ya existen `data/pesovision.db` y `models/best_model.pkl`, basta con activar 
 - **ETL (20 pts):** datos sin nulos críticos, duplicados eliminados, justificación de fuentes, SQLite documentado.
 - **Modelo (30 pts):** clasificador supervisado justificado, train/test temporal, reporte de precisión/recall/F1, comparación de al menos 2 algoritmos.
 - **Dashboard (20 pts):** gráficas claras (serie, predicciones vs real, importancia de features), texto de interpretación para decisiones.
-
----
-
-## 8. Equipo
-
-| Rol | Foco |
-|-----|------|
-| **Persona A** | ETL, SQL, calidad de datos, documentación técnica Fase 2 |
-| **Persona B** | Modelado, evaluación, dashboard, presentación |
-
-Ambos revisan README final y ensayo de presentación.
-
+  
 ---
 
 ## Licencia y uso
