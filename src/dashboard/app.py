@@ -1,12 +1,18 @@
 """Dashboard Streamlit — Fase 4 (esqueleto)."""
 
 import sqlite3
+import sys
 from pathlib import Path
 
 import joblib
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+# Streamlit ejecuta este archivo sin la raíz del proyecto en sys.path
+_ROOT = Path(__file__).resolve().parents[2]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from src.config import DB_PATH, ROOT_DIR
 
