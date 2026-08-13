@@ -70,15 +70,13 @@ PesoVision/
 │   └── pesovision.db  # SQLite (post-ETL)
 ├── src/
 │   ├── etl/           # Extracción, limpieza, carga (+ features en transform.py)
-│   ├── models/        # Entrenamiento (train.py)
-│   └── dashboard/     # Streamlit app
-├── models/            # Modelo entrenado (best_model.pkl)
-├── notebooks/         # Exploración EDA (pendiente)
+│   ├── models/        # common.py, train.py, evaluate.py
+│   └── dashboard/     # Streamlit app (4 pestañas)
+├── models/            # Artefactos del modelo (pkl, json, csv)
+├── notebooks/         # EDA (01_eda.ipynb)
 ├── docs/
-│   ├── PLANIFICACION.md
-│   ├── FASE1_CONTEXTO_Y_SELECCION.md
 │   └── DOCUMENTO_FUNCIONALIDAD.md
-├── tests/             # Pendiente
+├── tests/             # pytest
 ├── requirements.txt
 └── README.md
 ```
@@ -99,68 +97,40 @@ flowchart LR
 
 ## 5. Estado del proyecto
 
-> Actualizado según el avance real del repositorio. Detalle de tareas en [`docs/PLANIFICACION.md`](docs/PLANIFICACION.md).
-
 ### Resumen por fase
 
 | Fase | Entregable | Estado |
 |------|------------|--------|
-| **1** | Contexto, problemática y justificación de herramientas | Casi completa |
-| **2** | ETL funcional + `pesovision.db` | Implementada; falta EDA |
-| **3** | Modelo + métricas (accuracy, F1, ROC-AUC) | Código listo; falta informe |
-| **4** | Dashboard Streamlit + interpretación | Esqueleto (~25 %) |
+| **1** | Contexto, problemática y justificación de herramientas | Completa |
+| **2** | ETL + SQLite + EDA | Completa |
+| **3** | Modelo + evaluación + artefactos | Completa |
+| **4** | Dashboard Streamlit (4 pestañas) | Completa |
 
-### Hecho
+### Componentes implementados
 
-**Fase 1 — Contexto**
-- [x] README con problemática, target binario y arquitectura
-- [x] [`docs/PLANIFICACION.md`](docs/PLANIFICACION.md) y [`docs/FASE1_CONTEXTO_Y_SELECCION.md`](docs/FASE1_CONTEXTO_Y_SELECCION.md)
-- [x] Stack justificado (Python, SQLite, scikit-learn, Streamlit)
-- [x] Fuentes de datos identificadas (MVP: Yahoo Finance `USDMXN=X`)
+**ETL:** `extract.py`, `transform.py`, `load.py`, `run_etl.py`
 
-**Fase 2 — ETL**
-- [x] `src/etl/extract.py` — descarga OHLCV desde Yahoo Finance
-- [x] `src/etl/transform.py` — limpieza (nulos, duplicados, outliers) + feature engineering
-- [x] `src/etl/load.py` — carga en SQLite (`raw_fx_daily`, `fx_clean`, `fx_features`)
-- [x] `src/etl/run_etl.py` — orquestador de un solo comando
-- [x] Datos generados: `data/raw/usdmxn_raw.csv`, `data/processed/fx_features.csv`, `data/pesovision.db`
-- [x] ~1 950 filas de features (desde 2019 hasta la última ejecución del ETL)
+**Modelado:** `common.py`, `train.py`, `evaluate.py` — Regresión Logística vs Random Forest, split temporal, métricas train/test
 
-**Fase 3 — Modelado**
-- [x] `src/models/train.py` — Regresión Logística vs Random Forest
-- [x] Split temporal 80/20 y validación con `TimeSeriesSplit`
-- [x] Métricas en consola: accuracy, F1, ROC-AUC, matriz de confusión
-- [x] Modelo guardado en `models/best_model.pkl` (actualmente: regresión logística)
+**Dashboard:** pestañas **Predicción del día**, **Serie USD/MXN**, **Métricas del clasificador** y **Datos y ETL**
 
-**Fase 4 — Dashboard**
-- [x] `src/dashboard/app.py` — app Streamlit básica
-- [x] Métricas de resumen (último cierre, cambio 1d) y gráfica histórica USD/MXN
+**EDA:** [`notebooks/01_eda.ipynb`](notebooks/01_eda.ipynb)
 
-**Documentación**
-- [x] [`docs/DOCUMENTO_FUNCIONALIDAD.md`](docs/DOCUMENTO_FUNCIONALIDAD.md) — borrador para entrega académica
+**Tests:** [`tests/`](tests/) con pytest (7 tests)
 
-### Pendiente
+### Artefactos generados (`models/`)
 
+| Archivo | Descripción |
+|---------|-------------|
+| `best_model.pkl` | Modelo ganador + features |
+| `all_models.pkl` | Ambos modelos entrenados |
+| `metrics.json` | Métricas train/test, CV F1, importancia |
+| `test_predictions.csv` | Predicciones del periodo test |
+| `roc_curve.json` | Puntos FPR/TPR para gráfica ROC |
 
-**Fase 2**
-- [ ] Notebook EDA (`notebooks/01_eda.ipynb`) con 3 gráficas y conclusiones de calidad
-- [ ] Revisión cruzada / checklist de la rúbrica ETL
+### Nota técnica: generalización del modelo
 
-**Fase 3**
-- [ ] Informe de resultados con métricas finales (markdown o sección en documento funcional)
-- [ ] Discusión formal de overfitting/underfitting
-- [ ] Script `evaluate.py` separado
-
-**Fase 4**
-- [ ] Predicción “Sube / Baja” con probabilidad para el día siguiente
-- [ ] Histórico con predicciones correctas e incorrectas marcadas
-- [ ] Matriz de confusión, curva ROC e importancia de variables en el dashboard
-- [ ] Filtros de rango de fechas e interpretación orientada a decisiones
-
-**Entrega final**
-- [ ] Carpeta `tests/` con pruebas básicas
-- [ ] Exportar documento funcional a PDF/DOCX
-- [ ] Presentación con demo en vivo (ETL + dashboard, 10–15 min)
+Tras entrenar, revisar `metrics.json`: comparar F1 train vs test. Un gap grande (train >> test) sugiere overfitting; F1 test ~0.5 indica señal débil (esperable en FX diario). El dashboard incluye un resumen automático en la pestaña **Modelo**.
 
 ---
 
@@ -175,14 +145,29 @@ pip install -r requirements.txt
 # Fase 2: ETL
 python -m src.etl.run_etl
 
-# Fase 3: Entrenar modelo
+# Fase 3: Entrenar y evaluar modelo
 python -m src.models.train
+
+# Re-evaluar sin reentrenar (requiere all_models.pkl)
+python -m src.models.evaluate
+
+# Tests
+pytest tests/ -q
 
 # Fase 4: Dashboard
 streamlit run src/dashboard/app.py
 ```
 
 Si ya existen `data/pesovision.db` y `models/best_model.pkl`, basta con activar el entorno y ejecutar el dashboard.
+
+### Verificación completa
+
+```powershell
+python -m src.etl.run_etl
+python -m src.models.train
+pytest tests/ -q
+streamlit run src/dashboard/app.py
+```
 
 ---
 
