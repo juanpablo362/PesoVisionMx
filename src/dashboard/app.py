@@ -63,3 +63,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+    st.sidebar.caption("v0.1.0-alpha | Status: Skeleton Active")
