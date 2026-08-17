@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from src.models.common import FEATURE_COLS, temporal_split
+from src.models.common import FEATURE_COLS, build_candidates, temporal_split
 
 
 def test_temporal_split_preserves_order():
@@ -17,3 +17,8 @@ def test_feature_cols_count():
     assert len(FEATURE_COLS) == 8
     assert "dxy_return_1d" in FEATURE_COLS
     assert "dxy_return_5d" in FEATURE_COLS
+
+
+def test_build_candidates_includes_gradient_boosting():
+    names = set(build_candidates())
+    assert names == {"logistic_regression", "random_forest", "gradient_boosting"}

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -58,5 +58,8 @@ def build_candidates() -> dict:
         ),
         "random_forest": RandomForestClassifier(
             n_estimators=200, max_depth=6, random_state=42, n_jobs=-1
+        ),
+        "gradient_boosting": GradientBoostingClassifier(
+            n_estimators=100, max_depth=3, learning_rate=0.05, random_state=42
         ),
     }

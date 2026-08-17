@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
 import sys
+from types import SimpleNamespace
 from datetime import timedelta
 from pathlib import Path
 
@@ -19,6 +21,12 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from src.config import DB_PATH
+from src.dashboard.insights import (
+    FEATURE_LABELS,
+    build_report_pdf,
+    explain_today,
+    last_n_paper_trades,
+)
 from src.models.common import (
     BEST_MODEL_PATH,
     FEATURE_COLS,
@@ -29,27 +37,61 @@ from src.models.common import (
 
 MODEL_PATH = BEST_MODEL_PATH
 
-BG = "#1c1c1c"
-LINE = "#3a3a3a"
-TEXT = "#ececec"
-MUTED = "#9a9a9a"
-UP = "#3d8f6a"
-DOWN = "#c45c5c"
-PRIMARY = "#5B8FA8"
 
-CSS = f"""
+def _make_theme(**kwargs) -> SimpleNamespace:
+    return SimpleNamespace(**kwargs)
+
+
+THEMES = {
+    "dark": _make_theme(
+        bg="#1c1c1c",
+        line="#3a3a3a",
+        text="#ececec",
+        muted="#9a9a9a",
+        up="#3d8f6a",
+        down="#c45c5c",
+        primary="#5B8FA8",
+        split_bg="#4a4a4a",
+        usdmxn="#b8b8b8",
+        dxy="#c9a227",
+        highlight="#24333c",
+        cm_low="#1c1c1c",
+        cm_high="#6a6a6a",
+        bar="#8a8a8a",
+    ),
+    "light": _make_theme(
+        bg="#f6f5f2",
+        line="#d8d4cc",
+        text="#1c1c1c",
+        muted="#6a6a6a",
+        up="#2e7a58",
+        down="#b44545",
+        primary="#3d6f8a",
+        split_bg="#e4e0d8",
+        usdmxn="#4a4a4a",
+        dxy="#9a7209",
+        highlight="#e8eef2",
+        cm_low="#f6f5f2",
+        cm_high="#8a8a8a",
+        bar="#6a6a6a",
+    ),
+}
+
+
+def _css(theme: SimpleNamespace) -> str:
+    return f"""
 <style>
 html, body, [class*="css"] {{
     font-family: "Segoe UI", system-ui, sans-serif;
 }}
 
 .stApp {{
-    background: {BG};
-    color: {TEXT};
+    background: {theme.bg};
+    color: {theme.text};
 }}
 
 header[data-testid="stHeader"] {{
-    background: {BG};
+    background: {theme.bg};
     height: 0;
 }}
 
@@ -75,35 +117,37 @@ div[data-testid="stTabs"] [data-baseweb="tab-panel"] {{
 }}
 div[data-testid="stHorizontalBlock"] {{
     gap: 1rem !important;
+    align-items: center !important;
 }}
 [data-testid="stCaptionContainer"] {{
     margin-top: 0.6rem;
 }}
 
-.top {{
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 1.5rem;
-    border-bottom: 1px solid {LINE};
-    padding-bottom: 0.9rem;
-    margin-bottom: 1.15rem;
-}}
-.top h1 {{
+h1.brand {{
     font-size: 1.3rem;
     font-weight: 600;
     margin: 0;
-    line-height: 1.4;
-    overflow: visible;
-    color: {TEXT};
+    line-height: 1.25;
+    color: {theme.text};
 }}
-.top .meta {{
-    color: {MUTED};
+.header-meta {{
+    color: {theme.muted};
     font-size: 0.85rem;
+    margin: 0;
+    line-height: 1.25;
+}}
+.header-rule {{
+    border-bottom: 1px solid {theme.line};
+    margin: 0.55rem 0 1.05rem;
+}}
+div[data-testid="stToggle"] {{
+    display: flex;
+    align-items: center;
+    min-height: 1.6rem;
 }}
 
 .lead {{
-    color: {MUTED};
+    color: {theme.muted};
     font-size: 0.92rem;
     line-height: 1.55;
     margin: 0 0 1.15rem;
@@ -112,16 +156,16 @@ div[data-testid="stHorizontalBlock"] {{
 .kpis {{
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    border: 1px solid {LINE};
+    border: 1px solid {theme.line};
     margin-bottom: 1.5rem;
 }}
 .kpis > div {{
     padding: 1rem 1.05rem;
-    border-right: 1px solid {LINE};
+    border-right: 1px solid {theme.line};
 }}
 .kpis > div:last-child {{ border-right: none; }}
 .kpis .k {{
-    color: {MUTED};
+    color: {theme.muted};
     font-size: 0.75rem;
     margin-bottom: 0.35rem;
 }}
@@ -130,73 +174,22 @@ div[data-testid="stHorizontalBlock"] {{
     font-size: 1.2rem;
     margin-top: 0.2rem;
 }}
-.up {{ color: {UP}; }}
-.down {{ color: {DOWN}; }}
+.up {{ color: {theme.up}; }}
+.down {{ color: {theme.down}; }}
 
-.pred {{
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2.25rem;
-    border-top: 1px solid {LINE};
-    padding-top: 1.4rem;
-}}
-.pred h2 {{
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: {MUTED};
-    margin: 0 0 0.55rem;
-}}
-.dir {{
-    font-size: 3.4rem;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    line-height: 1.1;
-    margin: 0.15rem 0 0.85rem;
-}}
-.probs {{
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.1rem;
-    margin-bottom: 0.95rem;
-}}
-.probs .k {{ color: {MUTED}; font-size: 0.75rem; margin-bottom: 0.25rem; }}
-.probs .v {{
-    font-family: ui-monospace, Consolas, monospace;
-    font-size: 1.2rem;
-}}
 .split {{
     display: flex;
     height: 10px;
-    background: #4a4a4a;
+    background: {theme.split_bg};
 }}
-.split .a {{ background: {DOWN}; }}
-.split .b {{ background: {UP}; }}
+.split .a {{ background: {theme.down}; }}
+.split .b {{ background: {theme.up}; }}
 .split-cap {{
     display: flex;
     justify-content: space-between;
     font-size: 0.82rem;
-    color: {TEXT};
+    color: {theme.text};
     margin-top: 0.5rem;
-}}
-.conf {{
-    margin-top: 1rem;
-    font-size: 0.9rem;
-}}
-.interp p {{
-    margin: 0 0 0.8rem;
-    font-size: 0.92rem;
-    line-height: 1.6;
-    color: {TEXT};
-}}
-.interp .hint {{
-    color: {MUTED};
-    font-size: 0.88rem;
-    line-height: 1.6;
-}}
-.legal {{
-    color: {MUTED};
-    font-size: 0.78rem;
-    margin-top: 1rem;
 }}
 
 h3.sec {{
@@ -218,32 +211,37 @@ section[data-testid="stSidebar"],
 div[data-testid="stStatusWidget"] {{ display: none !important; }}
 
 div[data-testid="stTabs"] button {{
-    color: {MUTED};
+    color: {theme.muted};
 }}
 div[data-testid="stTabs"] button[aria-selected="true"] {{
-    color: {PRIMARY} !important;
+    color: {theme.primary} !important;
 }}
 
 @media (max-width: 900px) {{
-    .kpis, .pred {{ grid-template-columns: 1fr 1fr; }}
+    .kpis {{ grid-template-columns: 1fr 1fr; }}
     .kpis > div:nth-child(2) {{ border-right: none; }}
 }}
 </style>
 """
 
 
-def _plotly_layout(fig: go.Figure, title: str = "") -> go.Figure:
+def _theme() -> SimpleNamespace:
+    return THEMES[st.session_state.get("theme", "dark")]
+
+
+def _plotly_layout(fig: go.Figure, title: str = "", theme: SimpleNamespace | None = None) -> go.Figure:
+    theme = theme or _theme()
     fig.update_layout(
-        title=dict(text=title, font=dict(size=14, color=TEXT, family="Segoe UI")),
+        title=dict(text=title, font=dict(size=14, color=theme.text, family="Segoe UI")),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=MUTED, family="Segoe UI", size=13),
-        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=TEXT)),
+        font=dict(color=theme.muted, family="Segoe UI", size=13),
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=theme.text)),
         margin=dict(l=16, r=16, t=48, b=24),
         hovermode="x unified",
     )
-    fig.update_xaxes(gridcolor=LINE, zeroline=False, linecolor=LINE, tickfont=dict(size=12))
-    fig.update_yaxes(gridcolor=LINE, zeroline=False, linecolor=LINE, tickfont=dict(size=12))
+    fig.update_xaxes(gridcolor=theme.line, zeroline=False, linecolor=theme.line, tickfont=dict(size=12))
+    fig.update_yaxes(gridcolor=theme.line, zeroline=False, linecolor=theme.line, tickfont=dict(size=12))
     return fig
 
 
@@ -375,20 +373,62 @@ def _fmt_pct(value: float) -> str:
     return f"{sign}{value * 100:.2f}%"
 
 
-def render_header(df_clean: pd.DataFrame) -> None:
+def _model_label(name: str) -> str:
+    return {
+        "logistic_regression": "Regresión logística",
+        "random_forest": "Random Forest",
+        "gradient_boosting": "Gradient Boosting",
+    }.get(name, name.replace("_", " ").title())
+
+
+def _run_refresh(retrain: bool) -> tuple[bool, str]:
+    commands = [[sys.executable, "-m", "src.etl.run_etl"]]
+    if retrain:
+        commands.append([sys.executable, "-m", "src.models.train"])
+    chunks: list[str] = []
+    for cmd in commands:
+        proc = subprocess.run(
+            cmd,
+            cwd=_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        chunks.append((proc.stdout or "") + (proc.stderr or ""))
+        if proc.returncode != 0:
+            return False, "\n".join(chunks)
+    return True, "\n".join(chunks)
+
+
+def render_header(df_clean: pd.DataFrame, theme: SimpleNamespace) -> None:
     last_date = pd.to_datetime(df_clean.iloc[-1]["date"]).strftime("%d %b %Y")
-    st.markdown(
-        f"""
-        <div class="top">
-          <h1>PesoVision — USD/MXN</h1>
-          <div class="meta">Último cierre {last_date} · horizonte 1 día hábil</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    try:
+        left, mid, right = st.columns([2.6, 3.6, 1.05], vertical_alignment="center")
+    except TypeError:
+        left, mid, right = st.columns([2.6, 3.6, 1.05])
+    with left:
+        st.markdown('<h1 class="brand">PesoVision — USD/MXN</h1>', unsafe_allow_html=True)
+    with mid:
+        st.markdown(
+            f'<p class="header-meta">Último cierre {last_date} · horizonte 1 día hábil</p>',
+            unsafe_allow_html=True,
+        )
+    with right:
+        is_dark = st.toggle("Oscuro", value=st.session_state.theme == "dark")
+        wanted = "dark" if is_dark else "light"
+        if wanted != st.session_state.theme:
+            st.session_state.theme = wanted
+            st.rerun()
+    st.markdown('<div class="header-rule"></div>', unsafe_allow_html=True)
 
 
-def render_summary(df_clean: pd.DataFrame, df_features: pd.DataFrame, bundle: dict | None) -> None:
+def render_summary(
+    df_clean: pd.DataFrame,
+    df_features: pd.DataFrame,
+    bundle: dict | None,
+    metrics: dict | None,
+    theme: SimpleNamespace,
+) -> None:
     st.markdown(
         '<p class="lead"><b>Sube</b> = el USD/MXN cierra más alto (el peso se deprecia). '
         "<b>Baja</b> = cierra más bajo o igual. Las dos probabilidades suman 100%.</p>",
@@ -399,6 +439,7 @@ def render_summary(df_clean: pd.DataFrame, df_features: pd.DataFrame, bundle: di
     ret_1d = float(last.get("return_1d", 0) or 0)
     ret_5d = float(last_feat.get("return_5d", 0) or 0)
     vol = float(last_feat.get("volatility_20d", 0) or 0)
+    last_date = pd.to_datetime(last["date"]).strftime("%d %b %Y")
 
     st.markdown(
         f"""
@@ -430,9 +471,15 @@ def render_summary(df_clean: pd.DataFrame, df_features: pd.DataFrame, bundle: di
 
     label, p_up, p_down = predict_next_day(df_features, bundle)
     info = interpret_prediction(label, p_up, vol)
-    color = UP if label == "Sube" else DOWN
+    color = theme.up if label == "Sube" else theme.down
     down_w = max(1.0, p_down * 100)
     up_w = max(1.0, p_up * 100)
+
+    best_name = (metrics or {}).get("best_model") or bundle.get("name", "")
+    best_metrics = (metrics or {}).get("models", {}).get(best_name, {})
+    importance = best_metrics.get("feature_importance", {})
+    medians = df_features[FEATURE_COLS].median()
+    reasons = explain_today(last_feat, medians, importance) if importance else []
 
     col_pred, col_mean = st.columns(2, gap="large")
     with col_pred:
@@ -468,15 +515,57 @@ def render_summary(df_clean: pd.DataFrame, df_features: pd.DataFrame, bundle: di
             st.caption(f"{info['conf_explain']} {info['vol_note']}")
             st.caption("Proyecto educativo. No es asesoría financiera.")
 
+    if reasons:
+        st.markdown('<h3 class="sec">Por qué hoy</h3>', unsafe_allow_html=True)
+        for line in reasons:
+            st.markdown(f"- {line}")
 
-def render_history(df_clean: pd.DataFrame, preds: pd.DataFrame | None) -> None:
+    test_m = best_metrics.get("test", {})
+    pdf_bytes = build_report_pdf(
+        close=float(last["close"]),
+        last_date=last_date,
+        label=label,
+        p_up=p_up,
+        p_down=p_down,
+        model_name=_model_label(best_name),
+        f1=test_m.get("f1"),
+        auc=test_m.get("roc_auc"),
+        reasons=reasons,
+    )
+    st.download_button(
+        "Descargar reporte (PDF)",
+        data=pdf_bytes,
+        file_name="pesovision_reporte.pdf",
+        mime="application/pdf",
+    )
+
+    st.markdown('<h3 class="sec">Últimos 30 días</h3>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="lead">Paper trading educativo: predicción del modelo vs cierre real. '
+        "El recorte suele caer en el periodo de prueba. No es una estrategia de inversión.</p>",
+        unsafe_allow_html=True,
+    )
+    paper = last_n_paper_trades(df_features, bundle["model"], n=30)
+    hits = int((paper["Acierto"] == "Sí").sum())
+    st.caption(f"Aciertos: {hits}/{len(paper)} ({hits / len(paper):.0%}).")
+    st.dataframe(paper, use_container_width=True, hide_index=True)
+
+
+def render_history(
+    df_clean: pd.DataFrame,
+    df_features: pd.DataFrame,
+    preds: pd.DataFrame | None,
+    theme: SimpleNamespace,
+) -> None:
     st.markdown(
         '<p class="lead">Puntos en la serie: acierto o error del modelo en el <b>periodo de prueba</b> '
-        "(20% más reciente; no se usó para entrenar).</p>",
+        "(20% más reciente; no se usó para entrenar). El DXY va en el eje derecho.</p>",
         unsafe_allow_html=True,
     )
     df = df_clean.copy()
     df["date"] = pd.to_datetime(df["date"])
+    feats = df_features.copy()
+    feats["date"] = pd.to_datetime(feats["date"])
     min_date = df["date"].min().date()
     max_date = df["date"].max().date()
 
@@ -486,8 +575,9 @@ def render_history(df_clean: pd.DataFrame, preds: pd.DataFrame | None) -> None:
         "Todo el histórico": min_date,
         "Solo periodo de prueba": None,
     }
-    col_a, col_b, col_c = st.columns(3)
+    col_a, col_b, col_c, col_d = st.columns([1.4, 1.1, 1.1, 1.1])
     preset = col_a.selectbox("Periodo", list(presets.keys()), index=0)
+    show_dxy = col_d.checkbox("Mostrar DXY", value=True)
 
     if preset == "Solo periodo de prueba" and preds is not None and not preds.empty:
         default_start = preds["date"].min().date()
@@ -515,7 +605,7 @@ def render_history(df_clean: pd.DataFrame, preds: pd.DataFrame | None) -> None:
             y=filtered["close"],
             mode="lines",
             name="USD/MXN",
-            line=dict(color="#b8b8b8", width=1.6),
+            line=dict(color=theme.usdmxn, width=1.6),
             hovertemplate="%{x|%d %b %Y}<br>%{y:.4f}<extra></extra>",
         )
     )
@@ -534,7 +624,7 @@ def render_history(df_clean: pd.DataFrame, preds: pd.DataFrame | None) -> None:
                     y=correct["close"].iloc[::step],
                     mode="markers",
                     name="Acierto",
-                    marker=dict(color=UP, size=5, opacity=0.7, symbol="circle"),
+                    marker=dict(color=theme.up, size=5, opacity=0.7, symbol="circle"),
                 )
             )
             fig.add_trace(
@@ -543,11 +633,36 @@ def render_history(df_clean: pd.DataFrame, preds: pd.DataFrame | None) -> None:
                     y=wrong["close"].iloc[::step],
                     mode="markers",
                     name="Error",
-                    marker=dict(color=DOWN, size=6, opacity=0.75, symbol="x"),
+                    marker=dict(color=theme.down, size=6, opacity=0.75, symbol="x"),
                 )
             )
 
-    _plotly_layout(fig, "Cierre USD/MXN")
+    if show_dxy and "dxy_close" in feats.columns:
+        dxy_mask = (feats["date"].dt.date >= start) & (feats["date"].dt.date <= end)
+        dxy = feats.loc[dxy_mask, ["date", "dxy_close"]].dropna()
+        if not dxy.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=dxy["date"],
+                    y=dxy["dxy_close"],
+                    mode="lines",
+                    name="DXY",
+                    yaxis="y2",
+                    line=dict(color=theme.dxy, width=1.4, dash="dot"),
+                    hovertemplate="%{x|%d %b %Y}<br>DXY %{y:.2f}<extra></extra>",
+                )
+            )
+            fig.update_layout(
+                yaxis2=dict(
+                    title=dict(text="DXY", font=dict(color=theme.dxy)),
+                    overlaying="y",
+                    side="right",
+                    showgrid=False,
+                    tickfont=dict(color=theme.dxy, size=12),
+                )
+            )
+
+    _plotly_layout(fig, "Cierre USD/MXN", theme)
     fig.update_layout(
         yaxis_title="MXN por USD",
         xaxis_title=None,
@@ -571,13 +686,7 @@ def render_history(df_clean: pd.DataFrame, preds: pd.DataFrame | None) -> None:
     )
 
 
-def _model_label(name: str) -> str:
-    return {"logistic_regression": "Regresión logística", "random_forest": "Random Forest"}.get(
-        name, name.replace("_", " ").title()
-    )
-
-
-def render_model_tab(metrics: dict | None, roc: dict | None, bundle: dict | None) -> None:
+def render_model_tab(metrics: dict | None, roc: dict | None, bundle: dict | None, theme: SimpleNamespace) -> None:
     if metrics is None:
         st.info("Las métricas del modelo no están disponibles en este momento.")
         return
@@ -595,7 +704,7 @@ def render_model_tab(metrics: dict | None, roc: dict | None, bundle: dict | None
             unsafe_allow_html=True,
         )
     st.markdown(
-        '<p class="lead">Dos clasificadores con split temporal 80/20. '
+        '<p class="lead">Tres clasificadores con split temporal 80/20. '
         "Un accuracy de ~50% equivale a adivinar al azar; el FX diario es ruidoso.</p>",
         unsafe_allow_html=True,
     )
@@ -617,7 +726,7 @@ def render_model_tab(metrics: dict | None, roc: dict | None, bundle: dict | None
 
     def _highlight_winner(row):
         if row["Modelo"] == _model_label(best):
-            return ["background-color: #24333c"] * len(row)
+            return [f"background-color: {theme.highlight}"] * len(row)
         return [""] * len(row)
 
     st.dataframe(
@@ -642,17 +751,21 @@ def render_model_tab(metrics: dict | None, roc: dict | None, bundle: dict | None
         fig_cm = px.imshow(
             cm_df,
             text_auto=True,
-            color_continuous_scale=["#1c1c1c", "#6a6a6a"],
+            color_continuous_scale=[theme.cm_low, theme.cm_high],
             title=f"Matriz de confusión (test) — {_model_label(best)}",
         )
         fig_cm.update_coloraxes(showscale=False)
-        _plotly_layout(fig_cm, fig_cm.layout.title.text)
+        _plotly_layout(fig_cm, fig_cm.layout.title.text, theme)
         fig_cm.update_layout(height=400, autosize=True)
         left.plotly_chart(fig_cm, use_container_width=True)
 
     if roc:
         fig_roc = go.Figure()
-        colors = {"logistic_regression": "#c8c8c8", "random_forest": "#7a9bb8"}
+        colors = {
+            "logistic_regression": "#c8c8c8" if theme.bg == THEMES["dark"].bg else "#5a5a5a",
+            "random_forest": theme.primary,
+            "gradient_boosting": theme.dxy,
+        }
         for name, curve in roc.items():
             fig_roc.add_trace(
                 go.Scatter(
@@ -660,7 +773,7 @@ def render_model_tab(metrics: dict | None, roc: dict | None, bundle: dict | None
                     y=curve["tpr"],
                     mode="lines",
                     name=_model_label(name),
-                    line=dict(color=colors.get(name, TEXT), width=2),
+                    line=dict(color=colors.get(name, theme.text), width=2),
                 )
             )
         fig_roc.add_trace(
@@ -669,29 +782,19 @@ def render_model_tab(metrics: dict | None, roc: dict | None, bundle: dict | None
                 y=[0, 1],
                 mode="lines",
                 name="Azar",
-                line=dict(dash="dash", color=MUTED, width=1),
+                line=dict(dash="dash", color=theme.muted, width=1),
             )
         )
-        _plotly_layout(fig_roc, "Curva ROC (test)")
+        _plotly_layout(fig_roc, "Curva ROC (test)", theme)
         fig_roc.update_layout(xaxis_title="FPR", yaxis_title="TPR", height=400, autosize=True)
         right.plotly_chart(fig_roc, use_container_width=True)
 
     if bundle and metrics.get("best_model"):
         imp = metrics["models"][metrics["best_model"]].get("feature_importance", {})
         if imp:
-            labels = {
-                "return_1d": "Retorno 1d",
-                "return_5d": "Retorno 5d",
-                "return_20d": "Retorno 20d",
-                "ma_ratio": "Ratio MA 5/20",
-                "volatility_20d": "Volatilidad 20d",
-                "high_low_spread": "Rango high-low",
-                "dxy_return_1d": "Retorno DXY 1d",
-                "dxy_return_5d": "Retorno DXY 5d",
-            }
             imp_df = pd.DataFrame(
                 {
-                    "feature": [labels.get(k, k) for k in imp],
+                    "feature": [FEATURE_LABELS.get(k, k) for k in imp],
                     "importance": list(imp.values()),
                 }
             ).sort_values("importance", ascending=True)
@@ -702,8 +805,8 @@ def render_model_tab(metrics: dict | None, roc: dict | None, bundle: dict | None
                 orientation="h",
                 title=f"Peso de variables — {_model_label(best)}",
             )
-            fig_imp.update_traces(marker_color="#8a8a8a")
-            _plotly_layout(fig_imp, fig_imp.layout.title.text)
+            fig_imp.update_traces(marker_color=theme.bar)
+            _plotly_layout(fig_imp, fig_imp.layout.title.text, theme)
             fig_imp.update_layout(xaxis_title=None, yaxis_title=None, height=400)
             st.plotly_chart(fig_imp, use_container_width=True)
 
@@ -735,6 +838,24 @@ def render_etl_tab(df_clean: pd.DataFrame, metrics: dict | None) -> None:
         "Esta pestaña documenta el ETL (fases 1 y 2).</p>",
         unsafe_allow_html=True,
     )
+
+    st.markdown('<h3 class="sec">Actualizar datos</h3>', unsafe_allow_html=True)
+    st.caption(
+        "Vuelve a descargar USD/MXN y DXY desde Yahoo Finance. Tarda alrededor de un minuto "
+        "y necesita internet. Marca reentrenar si también quieres ajustar los modelos."
+    )
+    retrain = st.checkbox("Reentrenar modelo después de extraer", value=False)
+    if st.button("Actualizar datos"):
+        with st.spinner("Actualizando datos..."):
+            ok, log = _run_refresh(retrain)
+        if ok:
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.success("Datos actualizados.")
+            st.rerun()
+        else:
+            st.error("No se pudo actualizar.")
+            st.code(log[-4000:] if log else "Sin salida.")
 
     st.markdown('<h3 class="sec">Fuente de datos</h3>', unsafe_allow_html=True)
     fuentes = pd.DataFrame(
@@ -815,7 +936,10 @@ def main() -> None:
         initial_sidebar_state="collapsed",
         menu_items={"Get help": None, "Report a bug": None, "About": None},
     )
-    st.markdown(CSS, unsafe_allow_html=True)
+    if "theme" not in st.session_state:
+        st.session_state.theme = "dark"
+    theme = _theme()
+    st.markdown(_css(theme), unsafe_allow_html=True)
 
     if not DB_PATH.exists():
         st.error("No hay datos disponibles. Intenta más tarde.")
@@ -828,7 +952,7 @@ def main() -> None:
     preds = load_predictions()
     roc = load_roc()
 
-    render_header(df_clean)
+    render_header(df_clean, theme)
 
     tab_resumen, tab_hist, tab_modelo, tab_etl = st.tabs(
         [
@@ -839,16 +963,14 @@ def main() -> None:
         ]
     )
     with tab_resumen:
-        render_summary(df_clean, df_features, bundle)
+        render_summary(df_clean, df_features, bundle, metrics, theme)
     with tab_hist:
-        render_history(df_clean, preds)
+        render_history(df_clean, df_features, preds, theme)
     with tab_modelo:
-        render_model_tab(metrics, roc, bundle)
+        render_model_tab(metrics, roc, bundle, theme)
     with tab_etl:
         render_etl_tab(df_clean, metrics)
 
 
 if __name__ == "__main__":
     main()
-
-    st.sidebar.caption("v0.1.0-alpha | Status: Skeleton Active")

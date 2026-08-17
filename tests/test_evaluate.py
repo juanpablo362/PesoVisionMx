@@ -10,7 +10,7 @@ def test_metrics_json_structure():
     metrics = json.loads(METRICS_PATH.read_text(encoding="utf-8"))
     assert "models" in metrics
     assert "best_model" in metrics
-    for name in ("logistic_regression", "random_forest"):
+    for name in ("logistic_regression", "random_forest", "gradient_boosting"):
         assert name in metrics["models"]
         model = metrics["models"][name]
         assert "train" in model and "test" in model

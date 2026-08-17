@@ -42,11 +42,16 @@ def _split_metrics(y_true, y_pred, y_proba) -> dict:
 
 
 def _feature_importance(name: str, model) -> dict[str, float]:
-    if name == "random_forest":
+    if hasattr(model, "feature_importances_"):
         values = model.feature_importances_
-    elif name == "logistic_regression":
+    elif hasattr(model, "named_steps") and "clf" in model.named_steps:
         clf = model.named_steps["clf"]
-        values = np.abs(clf.coef_[0])
+        if hasattr(clf, "coef_"):
+            values = np.abs(clf.coef_[0])
+        elif hasattr(clf, "feature_importances_"):
+            values = clf.feature_importances_
+        else:
+            return {}
     else:
         return {}
     return {feat: float(val) for feat, val in zip(FEATURE_COLS, values)}
