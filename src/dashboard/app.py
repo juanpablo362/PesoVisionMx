@@ -263,7 +263,12 @@ def load_fx_features() -> pd.DataFrame:
 def load_table_counts() -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         rows = []
-        for table in ("raw_fx_daily", "fx_clean", "fx_features"):
+        for table in ("raw_fx_daily", "raw_dxy_daily", "fx_clean", "fx_features"):
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+            ).fetchone()
+            if not exists:
+                continue
             count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             date_range = conn.execute(f"SELECT MIN(date), MAX(date) FROM {table}").fetchone()
             rows.append(
@@ -681,6 +686,8 @@ def render_model_tab(metrics: dict | None, roc: dict | None, bundle: dict | None
                 "ma_ratio": "Ratio MA 5/20",
                 "volatility_20d": "Volatilidad 20d",
                 "high_low_spread": "Rango high-low",
+                "dxy_return_1d": "Retorno DXY 1d",
+                "dxy_return_5d": "Retorno DXY 5d",
             }
             imp_df = pd.DataFrame(
                 {
@@ -738,13 +745,20 @@ def render_etl_tab(df_clean: pd.DataFrame, metrics: dict | None) -> None:
                 "Variables": "Open, High, Low, Close, Volume",
                 "Frecuencia": "Diaria",
                 "Uso": "Serie principal del tipo de cambio",
-            }
+            },
+            {
+                "Fuente": "Yahoo Finance",
+                "Serie": "DX-Y.NYB (fallback DX=F)",
+                "Variables": "Close → retornos 1d y 5d",
+                "Frecuencia": "Diaria",
+                "Uso": "Índice del dólar (DXY) como contexto global",
+            },
         ]
     )
     st.dataframe(fuentes, use_container_width=True, hide_index=True)
     st.caption(
         "Se eligió Yahoo Finance porque ofrece histórico diario gratuito y reproducible. "
-        "El MVP no incorpora FRED ni Banxico; las features son técnicas (retornos, medias, volatilidad)."
+        "FRED y Banxico siguen como fuentes opcionales; DXY se alinea por fecha al USD/MXN."
     )
 
     origen = pd.DataFrame(
@@ -773,16 +787,16 @@ def render_etl_tab(df_clean: pd.DataFrame, metrics: dict | None) -> None:
     )
     st.dataframe(stats, use_container_width=True, hide_index=True)
     st.caption(
-        "`raw_fx_daily` es la extracción cruda; `fx_clean` una fila por día hábil; "
-        "`fx_features` las variables y el target `direction_next_day`."
+        "`raw_fx_daily` y `raw_dxy_daily` son extracciones crudas; `fx_clean` una fila por día hábil; "
+        "`fx_features` las variables (incl. DXY) y el target `direction_next_day`."
     )
 
     st.markdown('<h3 class="sec">Pipeline</h3>', unsafe_allow_html=True)
     st.markdown(
         """
-1. Extraer `USDMXN=X` a `data/raw/`
+1. Extraer `USDMXN=X` y DXY a `data/raw/`
 2. Limpiar nulos, duplicados y outliers
-3. Calcular retornos, medias móviles, volatilidad y target
+3. Unir DXY por fecha, calcular retornos, medias, volatilidad y target
 4. Cargar en SQLite
         """
     )

@@ -20,6 +20,8 @@ FEATURE_COLS = [
     "ma_ratio",
     "volatility_20d",
     "high_low_spread",
+    "dxy_return_1d",
+    "dxy_return_5d",
 ]
 TARGET_COL = "direction_next_day"
 

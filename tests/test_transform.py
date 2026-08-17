@@ -5,9 +5,9 @@ import pandas as pd
 from src.etl.transform import build_features, clean_fx
 
 
-def _sample_raw() -> pd.DataFrame:
+def _sample_ohlcv(start_price: float, step: float) -> pd.DataFrame:
     dates = pd.date_range("2024-01-01", periods=30, freq="B")
-    close = [20.0 + i * 0.01 for i in range(len(dates))]
+    close = [start_price + i * step for i in range(len(dates))]
     return pd.DataFrame(
         {
             "date": dates.date,
@@ -20,6 +20,14 @@ def _sample_raw() -> pd.DataFrame:
             "extracted_at": ["2024-01-01T00:00:00+00:00"] * len(dates),
         }
     )
+
+
+def _sample_raw() -> pd.DataFrame:
+    return _sample_ohlcv(20.0, 0.01)
+
+
+def _sample_dxy() -> pd.DataFrame:
+    return _sample_ohlcv(100.0, 0.02)
 
 
 def test_clean_fx_removes_duplicates():
@@ -41,7 +49,8 @@ def test_clean_fx_removes_outliers():
 
 def test_build_features_columns():
     clean, _ = clean_fx(_sample_raw())
-    features = build_features(clean)
+    dxy, _ = clean_fx(_sample_dxy())
+    features = build_features(clean, dxy)
     expected = {
         "return_1d",
         "return_5d",
@@ -49,7 +58,10 @@ def test_build_features_columns():
         "ma_ratio",
         "volatility_20d",
         "high_low_spread",
+        "dxy_return_1d",
+        "dxy_return_5d",
         "direction_next_day",
     }
     assert expected.issubset(set(features.columns))
     assert features["direction_next_day"].isin([0, 1]).all()
+    assert features["dxy_return_1d"].notna().all()

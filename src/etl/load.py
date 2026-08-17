@@ -24,6 +24,17 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             extracted_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS raw_dxy_daily (
+            date TEXT PRIMARY KEY,
+            open REAL,
+            high REAL,
+            low REAL,
+            close REAL,
+            volume REAL,
+            source TEXT,
+            extracted_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS fx_clean (
             date TEXT PRIMARY KEY,
             open REAL,
@@ -50,6 +61,9 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             ma_ratio REAL,
             volatility_20d REAL,
             high_low_spread REAL,
+            dxy_close REAL,
+            dxy_return_1d REAL,
+            dxy_return_5d REAL,
             direction_next_day INTEGER
         );
         """
@@ -61,12 +75,15 @@ def load_to_sqlite(
     clean: pd.DataFrame,
     features: pd.DataFrame,
     db_path: Path = DB_PATH,
+    raw_dxy: pd.DataFrame | None = None,
 ) -> Path:
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     with sqlite3.connect(db_path) as conn:
         _init_schema(conn)
         raw.to_sql("raw_fx_daily", conn, if_exists="replace", index=False)
+        if raw_dxy is not None:
+            raw_dxy.to_sql("raw_dxy_daily", conn, if_exists="replace", index=False)
         clean.to_sql("fx_clean", conn, if_exists="replace", index=False)
         features.to_sql("fx_features", conn, if_exists="replace", index=False)
 

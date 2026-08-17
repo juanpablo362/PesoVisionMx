@@ -53,10 +53,11 @@ Pequeñas y medianas empresas, importadores, exportadores y personas físicas en
 | Fuente | Variables | Frecuencia | Rol |
 |--------|-----------|------------|-----|
 | **Yahoo Finance** (`USDMXN=X`) | Open, High, Low, Close, Volume | Diaria | Serie principal |
+| **Yahoo Finance** (`DX-Y.NYB`, fallback `DX=F`) | Close → retornos 1d y 5d | Diaria | Índice del dólar (DXY) |
 | **FRED** (opcional) | Tasa Fed, inflación US | Mensual/diaria | Contexto macro |
 | **Banxico SIE** (opcional) | TIIE, reservas | Diaria | Contexto local |
 
-Prioridad MVP: **solo USD/MXN + features técnicas derivadas** (medias móviles, volatilidad, retornos lag). Las series macro se agregan si el equipo tiene tiempo.
+Prioridad actual: **USD/MXN + DXY** y features técnicas derivadas (medias móviles, volatilidad, retornos lag). FRED y Banxico siguen opcionales.
 
 ---
 

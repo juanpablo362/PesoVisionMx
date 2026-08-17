@@ -14,4 +14,6 @@ def test_temporal_split_preserves_order():
 
 
 def test_feature_cols_count():
-    assert len(FEATURE_COLS) == 6
+    assert len(FEATURE_COLS) == 8
+    assert "dxy_return_1d" in FEATURE_COLS
+    assert "dxy_return_5d" in FEATURE_COLS

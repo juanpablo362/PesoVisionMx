@@ -8,8 +8,10 @@ RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 DB_PATH = DATA_DIR / "pesovision.db"
 
-# Par Yahoo Finance: USD/MXN
+# Yahoo Finance
 FX_TICKER = "USDMXN=X"
+DXY_TICKER = "DX-Y.NYB"
+DXY_TICKER_FALLBACK = "DX=F"
 FX_START_DATE = "2019-01-01"
 
 # Limpieza
