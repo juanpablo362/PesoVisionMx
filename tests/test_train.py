@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from src.models.common import FEATURE_COLS, build_candidates, temporal_split
+from src.models.common import FEATURE_COLS, TARGET_COL, build_candidates, labeled_rows, temporal_split
 
 
 def test_temporal_split_preserves_order():
@@ -22,3 +22,15 @@ def test_feature_cols_count():
 def test_build_candidates_includes_gradient_boosting():
     names = set(build_candidates())
     assert names == {"logistic_regression", "random_forest", "gradient_boosting"}
+
+
+def test_labeled_rows_drops_missing_target():
+    df = pd.DataFrame(
+        {
+            "date": pd.date_range("2020-01-01", periods=5),
+            TARGET_COL: [0, 1, 0, 1, pd.NA],
+        }
+    )
+    out = labeled_rows(df)
+    assert len(out) == 4
+    assert out[TARGET_COL].notna().all()

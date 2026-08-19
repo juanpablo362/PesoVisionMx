@@ -27,6 +27,7 @@ from src.models.common import (
     ROC_PATH,
     TARGET_COL,
     build_candidates,
+    labeled_rows,
     load_features,
     temporal_split,
 )
@@ -123,7 +124,7 @@ def evaluate_fitted_models(
 
 def run_evaluation(fitted_models: dict | None = None, cv_f1: dict[str, float] | None = None) -> dict:
     """Evalúa modelos entrenados o carga desde all_models.pkl."""
-    df = load_features().sort_values("date")
+    df = labeled_rows(load_features())
     train, test = temporal_split(df)
 
     if fitted_models is None:

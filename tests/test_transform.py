@@ -63,5 +63,8 @@ def test_build_features_columns():
         "direction_next_day",
     }
     assert expected.issubset(set(features.columns))
-    assert features["direction_next_day"].isin([0, 1]).all()
+    labeled = features.dropna(subset=["direction_next_day"])
+    assert labeled["direction_next_day"].isin([0, 1]).all()
+    assert features["direction_next_day"].isna().iloc[-1]
+    assert int(features["direction_next_day"].isna().sum()) == 1
     assert features["dxy_return_1d"].notna().all()

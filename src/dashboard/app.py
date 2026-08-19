@@ -33,6 +33,7 @@ from src.models.common import (
     METRICS_PATH,
     PREDICTIONS_PATH,
     ROC_PATH,
+    TARGET_COL,
 )
 
 MODEL_PATH = BEST_MODEL_PATH
@@ -484,7 +485,14 @@ def render_summary(
     col_pred, col_mean = st.columns(2, gap="large")
     with col_pred:
         with st.container(border=True):
-            st.caption("Siguiente día hábil")
+            feat_date = pd.to_datetime(last_feat["date"]).strftime("%d %b %Y")
+            if pd.isna(last_feat.get(TARGET_COL)):
+                st.caption(f"Siguiente día hábil · con el cierre del {feat_date}")
+            else:
+                st.caption(
+                    f"Siguiente día hábil · última fila etiquetada ({feat_date}). "
+                    "Actualiza datos para predecir a partir del último cierre."
+                )
             st.markdown(
                 f'<p class="dir" style="color:{color};font-size:3.4rem;font-weight:700;'
                 f'letter-spacing:-0.03em;line-height:1.1;margin:0.1rem 0 0.9rem 0">{label}</p>',
@@ -909,7 +917,9 @@ def render_etl_tab(df_clean: pd.DataFrame, metrics: dict | None) -> None:
     st.dataframe(stats, use_container_width=True, hide_index=True)
     st.caption(
         "`raw_fx_daily` y `raw_dxy_daily` son extracciones crudas; `fx_clean` una fila por día hábil; "
-        "`fx_features` las variables (incl. DXY) y el target `direction_next_day`."
+        "`fx_features` las variables (incl. DXY) y el target `direction_next_day`. "
+        "La última fila no tiene target: sirve para predecir el día siguiente "
+        "sin reentrenar (Actualizar datos)."
     )
 
     st.markdown('<h3 class="sec">Pipeline</h3>', unsafe_allow_html=True)
@@ -917,7 +927,7 @@ def render_etl_tab(df_clean: pd.DataFrame, metrics: dict | None) -> None:
         """
 1. Extraer `USDMXN=X` y DXY a `data/raw/`
 2. Limpiar nulos, duplicados y outliers
-3. Unir DXY por fecha, calcular retornos, medias, volatilidad y target
+3. Unir DXY por fecha, calcular retornos, medias, volatilidad y target (la última fila se guarda sin etiqueta para inferencia)
 4. Cargar en SQLite
         """
     )

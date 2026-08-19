@@ -12,6 +12,7 @@ from src.models.common import (
     MODELS_DIR,
     TARGET_COL,
     build_candidates,
+    labeled_rows,
     load_features,
     temporal_split,
 )
@@ -19,7 +20,7 @@ from src.models.evaluate import evaluate_fitted_models
 
 
 def train_and_evaluate() -> dict:
-    df = load_features().sort_values("date")
+    df = labeled_rows(load_features())
     train, test = temporal_split(df)
 
     X_train, y_train = train[FEATURE_COLS], train[TARGET_COL]

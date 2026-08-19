@@ -71,7 +71,7 @@ def explain_today(
 
 
 def last_n_paper_trades(features: pd.DataFrame, model, n: int = 30) -> pd.DataFrame:
-    subset = features.tail(n).copy()
+    subset = features.dropna(subset=[TARGET_COL]).tail(n).copy()
     y_pred = model.predict(subset[FEATURE_COLS])
     y_true = subset[TARGET_COL].astype(int).to_numpy()
     return pd.DataFrame(

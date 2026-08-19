@@ -33,7 +33,11 @@ def test_last_n_paper_trades_shape():
         }
     )
     model = LogisticRegression().fit(df[FEATURE_COLS], df[TARGET_COL])
-    table = last_n_paper_trades(df, model, n=10)
+    unlabeled = df.iloc[[-1]].copy()
+    unlabeled[TARGET_COL] = pd.NA
+    unlabeled["date"] = pd.Timestamp("2024-02-01")
+    with_infer = pd.concat([df, unlabeled], ignore_index=True)
+    table = last_n_paper_trades(with_infer, model, n=10)
     assert len(table) == 10
     assert list(table.columns) == ["Fecha", "Predicho", "Real", "Acierto"]
     assert table["Acierto"].isin(["Sí", "No"]).all()

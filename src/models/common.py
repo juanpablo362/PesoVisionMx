@@ -41,6 +41,11 @@ def load_features() -> pd.DataFrame:
     return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
 
 
+def labeled_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Filas con target conocido. Excluye el último día hábil (aún sin cierre de mañana)."""
+    return df.sort_values("date").dropna(subset=[TARGET_COL]).copy()
+
+
 def temporal_split(df: pd.DataFrame, test_ratio: float = 0.2) -> tuple[pd.DataFrame, pd.DataFrame]:
     n_test = int(len(df) * test_ratio)
     train = df.iloc[:-n_test]

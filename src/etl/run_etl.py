@@ -31,7 +31,9 @@ def run() -> None:
 
     print("[3/4] Feature engineering...")
     features = build_features(clean, clean_dxy)
-    print(f"      {len(features)} filas con target")
+    n_labeled = int(features["direction_next_day"].notna().sum())
+    n_infer = len(features) - n_labeled
+    print(f"      {len(features)} filas ({n_labeled} con target, {n_infer} para inferencia)")
 
     print("[4/4] Carga...")
     db = load_to_sqlite(raw, clean, features, raw_dxy=raw_dxy)

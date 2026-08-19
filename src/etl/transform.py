@@ -94,12 +94,11 @@ def build_features(df: pd.DataFrame, dxy: pd.DataFrame) -> pd.DataFrame:
     out["volatility_20d"] = out["return_1d"].rolling(20).std()
     out["high_low_spread"] = (out["high"] - out["low"]) / out["close"]
 
-    # Target: dirección del día siguiente (solo USD/MXN)
-    out["direction_next_day"] = (out["close"].shift(-1) > out["close"]).astype("Int64")
+    next_close = out["close"].shift(-1)
+    out["direction_next_day"] = (next_close > out["close"]).astype("Int64")
+    out.loc[next_close.isna(), "direction_next_day"] = pd.NA
 
-    # Última fila no tiene target
-    out = out.iloc[:-1].copy()
-    out = out.dropna()
-    out["direction_next_day"] = out["direction_next_day"].astype(int)
+    feature_ready = [c for c in out.columns if c != "direction_next_day"]
+    out = out.dropna(subset=feature_ready)
 
     return out.reset_index(drop=True)
