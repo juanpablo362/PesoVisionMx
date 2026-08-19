@@ -172,14 +172,6 @@ streamlit run src/dashboard/app.py
 
 ---
 
-## 7. Métricas de éxito (rúbrica)
-
-- **ETL (20 pts):** datos sin nulos críticos, duplicados eliminados, justificación de fuentes, SQLite documentado.
-- **Modelo (30 pts):** clasificador supervisado justificado, train/test temporal, reporte de precisión/recall/F1, comparación de al menos 2 algoritmos.
-- **Dashboard (20 pts):** gráficas claras (serie, predicciones vs real, importancia de features), texto de interpretación para decisiones.
-  
----
-
 ## Licencia y uso
 
 Proyecto académico. No usar predicciones como recomendación de inversión.
